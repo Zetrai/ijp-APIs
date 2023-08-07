@@ -3,6 +3,7 @@ const express = require('express');
 const path = require('path');
 const cookieParser = require('cookie-parser');
 const logger = require('morgan');
+const cors = require('cors');
 
 const db = require('./util/database');
 
@@ -15,9 +16,14 @@ const app = express();
 app.set('views', path.join(__dirname, 'views'));
 app.set('view engine', 'pug');
 
-db.getEmployees().then((res) => {
-  console.log(res);
-});
+// let raj = new Employee(40035175, 'Rajesh Kuthrapalli', 'Project Manager', 10);
+// console.log(raj);
+// db.createEmployee(raj).then((res) => {
+//   console.log(res);
+// });
+
+// Enable CORS for all routes
+app.use(cors());
 
 app.use(logger('dev'));
 app.use(express.json());
