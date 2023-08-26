@@ -28,7 +28,7 @@ router.post('/register-employee', async function (req, res, next) {
   console.log(EmployeeDetails.Pwd);
   EmployeeDetails.Pwd = await helpers.hashPassword(EmployeeDetails.Pwd);
   console.log(EmployeeDetails);
-  let employee = await db.createEmployee(EmployeeDetails);
+  let employee = await db.registerEmployee(EmployeeDetails);
   // employee = employee.recordset;
   console.log('Employee: ', employee);
   res.status(200).send('Registered');
@@ -53,7 +53,7 @@ router.post('/login-check', async function (req, res, next) {
 
 router.get('/get-list-data', async function (req, res, next) {
   let data = await db.getAllListData();
-  console.log('List Data: ', data);
+  // console.log('List Data: ', data);
   res.status(200).send(data);
 });
 

@@ -18,7 +18,7 @@ const getEmployeeByID = async (EmployeeID) => {
             ED.EmployeeID,
             ED.Username,
             DL.Designation AS Designation,
-            RL.EmpRole AS EmployeeRole,
+            RL.EmpRoleID AS EmployeeRole,
             PL.Practice AS Practice,
             BL.Band AS Band,
             CL.Country AS Country,
@@ -28,7 +28,7 @@ const getEmployeeByID = async (EmployeeID) => {
         FROM
             EmployeeDetails ED
             LEFT JOIN DesignationList DL ON ED.DesignationID = DL.DesignationID
-            LEFT JOIN RoleList RL ON ED.EmpRoleID = RL.RoleID
+            LEFT JOIN RoleList RL ON ED.EmpRoleID = RL.EmpRoleID
             LEFT JOIN PracticeList PL ON ED.PracticeID = PL.PracticeID
             LEFT JOIN BandList BL ON ED.BandID = BL.BandID
             LEFT JOIN CountryList CL ON ED.CountryID = CL.CountryID
@@ -43,28 +43,55 @@ const getEmployeeByID = async (EmployeeID) => {
   }
 };
 
-const createEmployee = async (Employee) => {
+const registerEmployee = async (employeeData) => {
   try {
+    const {
+      EmployeeID,
+      Username,
+      Designation,
+      EmpRole,
+      Practice,
+      Band,
+      Country,
+      State,
+      TotalExperience,
+      Pwd,
+    } = employeeData;
+
     let pool = await sql.connect(config);
-    await pool.request().query(`INSERT INTO EmployeeDetails VALUES
-    ('${Employee.EmployeeID}', 
-    '${Employee.Username}',
-    '${Employee.DesignationID}', 
-    '${Employee.EmpRoleID}', 
-    '${Employee.PracticeID}', 
-    '${Employee.BandID}', 
-    '${Employee.CountryID}', 
-    '${Employee.StateID}', 
-    '${Employee.TotalExperience}', 
-    '${Employee.Pwd}')`);
-    return `Employee ${Employee.Username} Added`;
+    const query = `
+      INSERT INTO EmployeeDetails (EmployeeID, Username, DesignationID, EmpRoleID, PracticeID, BandID, CountryID, StateID, TotalExperience, Pwd)
+      SELECT
+        @EmployeeID,
+        @Username,
+        (SELECT DesignationID FROM DesignationList WHERE Designation = @Designation) AS DesignationID,
+        (SELECT EmpRoleID FROM RoleList WHERE EmpRole = @EmpRole) AS EmpRoleID,
+        (SELECT PracticeID FROM PracticeList WHERE Practice = @Practice) AS PracticeID,
+        (SELECT BandID FROM BandList WHERE Band = @Band) AS BandID,
+        (SELECT CountryID FROM CountryList WHERE Country = @Country) AS CountryID,
+        (SELECT StateID FROM StateList WHERE StateName = @State) AS StateID,
+        @TotalExperience,
+        @Pwd
+    `;
+
+    const result = await pool
+      .request()
+      .input('EmployeeID', sql.Int, EmployeeID)
+      .input('Username', sql.VarChar(50), Username)
+      .input('Designation', sql.VarChar(50), Designation)
+      .input('EmpRole', sql.VarChar(50), EmpRole)
+      .input('Practice', sql.VarChar(50), Practice)
+      .input('Band', sql.VarChar(50), Band)
+      .input('Country', sql.VarChar(50), Country)
+      .input('State', sql.VarChar(50), State)
+      .input('TotalExperience', sql.Int, TotalExperience)
+      .input('Pwd', sql.VarChar(sql.MAX), Pwd) // Use sql.VarChar(sql.MAX) for varchar(max)
+      .query(query);
+
+    return result.rowsAffected[0] > 0;
   } catch (error) {
-    if (error.number === 2627) {
-      console.log('Error: Duplicate entry for primary key.');
-      return 'Duplicate Entry Error';
-    } else {
-      console.log(error);
-    }
+    console.log(error);
+    return false;
   }
 };
 
@@ -73,24 +100,23 @@ const getAllListData = async () => {
     let pool = await sql.connect(config);
 
     const queries = [
-      "SELECT SkillID AS ID, Skill AS Name, 'SkillList' AS TableName FROM SkillList",
-      "SELECT DesignationID AS ID, Designation AS Name, 'DesignationList' AS TableName FROM DesignationList",
-      "SELECT StateID AS ID, StateName AS Name, 'StateList' AS TableName FROM StateList",
-      "SELECT CustomerID AS ID, Customer AS Name, 'CustomersList' AS TableName FROM CustomersList",
-      "SELECT RoleID AS ID, EmpRole AS Name, 'RoleList' AS TableName FROM RoleList",
-      "SELECT AccountID AS ID, Account AS Name, 'AccountList' AS TableName FROM AccountList",
-      "SELECT BandID AS ID, Band AS Name, 'BandList' AS TableName FROM BandList",
-      "SELECT PracticeID AS ID, Practice AS Name, 'PracticeList' AS TableName FROM PracticeList",
-      "SELECT CountryID AS ID, Country AS Name, 'CountryList' AS TableName FROM CountryList",
+      'SELECT Skill AS Name FROM SkillList',
+      'SELECT Designation AS Name FROM DesignationList',
+      'SELECT StateName AS Name FROM StateList',
+      'SELECT Customer AS Name FROM CustomersList',
+      'SELECT EmpRole AS Name FROM RoleList',
+      'SELECT Account AS Name FROM AccountList',
+      'SELECT Band AS Name FROM BandList',
+      'SELECT Practice AS Name FROM PracticeList',
+      'SELECT Country AS Name FROM CountryList',
     ];
 
     const results = {};
 
     for (const query of queries) {
       const result = await pool.request().query(query);
-      const tableName = result.recordset[0].TableName;
-      delete result.recordset[0].TableName;
-      results[tableName] = result.recordset;
+      const tableName = query.split('FROM ')[1];
+      results[tableName] = result.recordset.map((item) => item.Name);
     }
 
     return results;
@@ -100,7 +126,7 @@ const getAllListData = async () => {
 };
 
 module.exports = {
-  createEmployee,
+  registerEmployee,
   getEmployees,
   getEmployeeByID,
   getAllListData,
