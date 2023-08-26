@@ -29,9 +29,11 @@ router.post('/register-employee', async function (req, res, next) {
   EmployeeDetails.Pwd = await helpers.hashPassword(EmployeeDetails.Pwd);
   console.log(EmployeeDetails);
   let employee = await db.registerEmployee(EmployeeDetails);
+  delete employee.Pwd;
   // employee = employee.recordset;
-  console.log('Employee: ', employee);
-  res.status(200).send('Registered');
+  employee
+    ? res.status(200).send(employee)
+    : res.status(400).send('Registration Failed! Try again');
 });
 
 router.post('/login-check', async function (req, res, next) {

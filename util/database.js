@@ -88,7 +88,7 @@ const registerEmployee = async (employeeData) => {
       .input('Pwd', sql.VarChar(sql.MAX), Pwd) // Use sql.VarChar(sql.MAX) for varchar(max)
       .query(query);
 
-    return result.rowsAffected[0] > 0;
+    return result.rowsAffected[0] > 0 ? employeeData : false;
   } catch (error) {
     console.log(error);
     return false;
