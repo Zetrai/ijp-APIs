@@ -18,7 +18,7 @@ const getEmployeeByID = async (EmployeeID) => {
             ED.EmployeeID,
             ED.Username,
             DL.Designation AS Designation,
-            RL.EmpRoleID AS EmployeeRole,
+            RL.EmpRole AS EmployeeRole,
             PL.Practice AS Practice,
             BL.Band AS Band,
             CL.Country AS Country,

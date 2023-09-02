@@ -19,6 +19,7 @@ router.get('/get-all-employees', async function (req, res, next) {
 router.get('/get-employee-by-id', async function (req, res, next) {
   const EmployeeID = req.query.EmployeeID;
   let employee = await db.getEmployeeByID(EmployeeID);
+  delete employee?.Pwd;
   console.log('Employee: ', employee);
   res.status(200).send(employee);
 });
