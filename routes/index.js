@@ -11,7 +11,7 @@ router.get('/', function (req, res, next) {
 
 router.get('/get-all-employees', async function (req, res, next) {
   let employees = await db.getEmployees();
-  employees = employees.recordset[0];
+  employees = employees;
   console.log('All Employees: ', employees);
   res.status(200).send(employees);
 });
@@ -24,11 +24,15 @@ router.get('/get-employee-by-id', async function (req, res, next) {
   res.status(200).send(employee);
 });
 
+router.get('/get-list-data', async function (req, res, next) {
+  let data = await db.getAllListData();
+  // console.log('List Data: ', data);
+  res.status(200).send(data);
+});
+
 router.post('/register-employee', async function (req, res, next) {
   const EmployeeDetails = req.body;
-  console.log(EmployeeDetails.Pwd);
   EmployeeDetails.Pwd = await helpers.hashPassword(EmployeeDetails.Pwd);
-  console.log(EmployeeDetails);
   let employee = await db.registerEmployee(EmployeeDetails);
   delete employee.Pwd;
   // employee = employee.recordset;
@@ -38,8 +42,7 @@ router.post('/register-employee', async function (req, res, next) {
 });
 
 router.post('/login-check', async function (req, res, next) {
-  const EmployeeID = req.body.EmployeeID;
-  const Pwd = req.body.Pwd;
+  const { EmployeeID, Pwd } = req.body;
   let employee = await db.getEmployeeByID(EmployeeID);
   console.log('Employee: ', employee);
   if (employee !== undefined) {
@@ -54,10 +57,28 @@ router.post('/login-check', async function (req, res, next) {
   }
 });
 
-router.get('/get-list-data', async function (req, res, next) {
-  let data = await db.getAllListData();
-  // console.log('List Data: ', data);
-  res.status(200).send(data);
+router.post('/list-project', async function (req, res, next) {
+  const projectDetails = req.body;
+
+  let response = await db.listProject(projectDetails);
+  response
+    ? res.status(200).send('Project Listed')
+    : res.status(400).send('Project Not Listed! Try again');
+});
+
+router.get('/get-listed-projects', async function (req, res, next) {
+  const listedProjects = await db.getListedProject();
+
+  if (listedProjects) {
+    for (let i in listedProjects) {
+      listedProjects[i].AdditionalSkills = listedProjects[
+        i
+      ].AdditionalSkills.replace(/'/g, '"');
+    }
+    res.status(200).send(listedProjects);
+  } else {
+    res.status(400).send('Error');
+  }
 });
 
 module.exports = router;
