@@ -61,6 +61,7 @@ router.post('/list-project', async function (req, res, next) {
   const projectDetails = req.body;
 
   let response = await db.listProject(projectDetails);
+  await db.incrementProjectCount(projectDetails);
   response
     ? res.status(200).send('Project Listed')
     : res.status(400).send('Project Not Listed! Try again');
@@ -79,6 +80,12 @@ router.get('/get-listed-projects', async function (req, res, next) {
   } else {
     res.status(400).send('Error');
   }
+});
+
+router.get('/sort-helper', async function (req, res, next) {
+  const sortHelperData = await db.sortHelperDB();
+
+  res.status(200).send(sortHelperData);
 });
 
 module.exports = router;

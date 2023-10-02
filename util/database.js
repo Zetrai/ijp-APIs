@@ -48,6 +48,28 @@ const getAllListData = async () => {
   }
 };
 
+const sortHelperDB = async () => {
+  try {
+    let pool = await sql.connect(config);
+    const queries = [
+      'SELECT Skill, ProjectCount FROM SkillList ORDER BY ProjectCount DESC',
+    ];
+    // let res = await pool.request().query(`
+    //   SELECT Skill, ProjectCount FROM SkillList ORDER BY ProjectCount DESC
+    // `);
+
+    const results = {};
+    for (const query of queries) {
+      const result = await pool.request().query(query);
+      const tableName = query.match(/FROM\s+(\w+)/i)[1];
+      results[tableName] = result.recordsets[0];
+    }
+    return results;
+  } catch (error) {
+    console.log(error);
+  }
+};
+
 const getEmployeeByID = async (EmployeeID) => {
   try {
     let pool = await sql.connect(config);
@@ -141,6 +163,8 @@ const listProject = async (projectDetails) => {
       Account,
       Practice,
       Area,
+      Country,
+      State,
       ProjectManagerID,
       DeliveryManagerID,
       CreatedByID,
@@ -152,7 +176,7 @@ const listProject = async (projectDetails) => {
 
     let pool = await sql.connect(config);
     const query = `
-      INSERT INTO ProjectList (DisplayName, CustomerID, AccountID, PracticeID, Area, ProjectManagerID, 
+      INSERT INTO ProjectList (DisplayName, CustomerID, AccountID, PracticeID, Area, CountryID, StateID, ProjectManagerID, 
         DeliveryManagerID, CreatedByID, MandatorySkillID, AdditionalSkills, ShortRoleDescription, DetailedRoleDescription)
       SELECT
         @DisplayName,
@@ -160,6 +184,8 @@ const listProject = async (projectDetails) => {
         (SELECT AccountID FROM AccountList WHERE Account = @Account) AS AccountID,
         (SELECT PracticeID FROM PracticeList WHERE Practice = @Practice) AS PracticeID,
         @Area,
+        (SELECT CountryID FROM CountryList WHERE Country = @Country) AS CountryID,
+        (SELECT StateID FROM StateList WHERE StateName = @State) AS StateID,
         @ProjectManagerID,
         @DeliveryManagerID,
         @CreatedByID,
@@ -176,6 +202,8 @@ const listProject = async (projectDetails) => {
       .input('Account', sql.VarChar(50), Account)
       .input('Practice', sql.VarChar(50), Practice)
       .input('Area', sql.VarChar(50), Area)
+      .input('Country', sql.VarChar(50), Country)
+      .input('State', sql.VarChar(50), State)
       .input('ProjectManagerID', sql.Int, ProjectManagerID)
       .input('DeliveryManagerID', sql.Int, DeliveryManagerID)
       .input('CreatedByID', sql.Int, CreatedByID)
@@ -196,6 +224,23 @@ const listProject = async (projectDetails) => {
   }
 };
 
+const incrementProjectCount = async (projectDetails) => {
+  try {
+    let pool = await sql.connect(config);
+    const skill = projectDetails.MandatorySkill;
+    const query = `UPDATE SkillList SET ProjectCount = ProjectCount + 1 WHERE Skill = @Skill`;
+
+    let result = await pool
+      .request()
+      .input('Skill', sql.NVarChar(50), skill)
+      .query(query);
+
+    return result;
+  } catch (error) {
+    console.log(error);
+  }
+};
+
 const getListedProject = async () => {
   try {
     let pool = await sql.connect(config);
@@ -207,11 +252,14 @@ const getListedProject = async () => {
         AL.Account as Account,
         PCL.Practice as Practice,
         PL.Area,
+        COL.Country as Country,
+        STL.StateName as State,
         PL.ProjectManagerID,
         ED1.Username as ProjectMangerName,
         PL.DeliveryManagerID,
         ED2.Username as DeliveryManagerName,
         PL.CreatedByID,
+        ED3.Username as CreatedByName,
         SL.Skill as MandatorySkill,
         PL.AdditionalSkills,
         PL.ShortRoleDescription,
@@ -221,8 +269,11 @@ const getListedProject = async () => {
         LEFT JOIN CustomersList CL ON PL.CustomerID = CL.CustomerID
         LEFT JOIN AccountList AL ON PL.AccountID = AL.AccountID
         LEFT JOIN PracticeList PCL ON PL.PracticeID = PCL.PracticeID
+        LEFT JOIN CountryList COL ON PL.CountryID = COL.CountryID
+        LEFT JOIN StateList STL ON PL.StateID = STL.StateID
         LEFT JOIN EmployeeDetails ED1 ON PL.ProjectManagerID = ED1.EmployeeID
         LEFT JOIN EmployeeDetails ED2 ON PL.DeliveryManagerID = ED2.EmployeeID
+        LEFT JOIN EmployeeDetails ED3 ON PL.CreatedByID = ED3.EmployeeID
         LEFT JOIN SkillList SL ON PL.MandatorySkillID = SL.SkillID
         `);
     return employees.recordset;
@@ -238,4 +289,6 @@ module.exports = {
   registerEmployee,
   listProject,
   getListedProject,
+  incrementProjectCount,
+  sortHelperDB,
 };
