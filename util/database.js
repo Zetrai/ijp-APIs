@@ -8,7 +8,8 @@ const getEmployees = async () => {
       SELECT
         ED.EmployeeID,
         ED.Username,
-        DL.Designation AS Designation 
+        DL.Designation AS Designation,
+        ED.ProjectsApplied
       FROM 
         EmployeeDetails ED
         LEFT JOIN DesignationList DL ON ED.DesignationID = DL.DesignationID`);
@@ -84,7 +85,8 @@ const getEmployeeByID = async (EmployeeID) => {
             CL.Country AS Country,
             SL.StateName AS State,
             ED.TotalExperience,
-            ED.Pwd
+            ED.Pwd,
+            ED.ProjectsApplied
         FROM
             EmployeeDetails ED
             LEFT JOIN DesignationList DL ON ED.DesignationID = DL.DesignationID
@@ -149,6 +151,68 @@ const registerEmployee = async (employeeData) => {
       .query(query);
 
     return result.rowsAffected[0] > 0 ? employeeData : false;
+  } catch (error) {
+    console.log(error);
+    return false;
+  }
+};
+
+const updateEmployeeDetails = async (employeeDetails) => {
+  try {
+    let pool = await sql.connect(config);
+    let emp = await getEmployeeByID(employeeDetails.EmployeeID);
+    emp['EmpRole'] = emp.EmployeeRole;
+    for (let key in employeeDetails) {
+      emp[key] = employeeDetails[key];
+    }
+    const {
+      EmployeeID,
+      Username,
+      Designation,
+      EmpRole,
+      Practice,
+      Band,
+      Country,
+      State,
+      TotalExperience,
+      Pwd,
+    } = emp;
+
+    let query = `UPDATE EmployeeDetails SET 
+      Username = @Username, 
+      DesignationID = (SELECT DesignationID FROM DesignationList WHERE Designation = @Designation),
+      EmpRoleID = (SELECT EmpRoleID FROM RoleList WHERE EmpRole = @EmpRole),
+      PracticeID = (SELECT PracticeID FROM PracticeList WHERE Practice = @Practice),
+      BandID = (SELECT BandID FROM BandList WHERE Band = @Band),
+      CountryID = (SELECT CountryID FROM CountryList WHERE Country = @Country),
+      StateID = (SELECT StateID FROM StateList WHERE StateName = @State),
+      TotalExperience = @TotalExperience,
+      Pwd = @Pwd
+    WHERE EmployeeID = @EmployeeID`;
+
+    await pool
+      .request()
+      .input('EmployeeID', sql.Int, EmployeeID)
+      .input('Username', sql.VarChar(50), Username)
+      .input('Designation', sql.VarChar(50), Designation)
+      .input('EmpRole', sql.VarChar(50), EmpRole)
+      .input('Practice', sql.VarChar(50), Practice)
+      .input('Band', sql.VarChar(50), Band)
+      .input('Country', sql.VarChar(50), Country)
+      .input('State', sql.VarChar(50), State)
+      .input('TotalExperience', sql.Int, TotalExperience)
+      .input('Pwd', sql.VarChar(sql.MAX), Pwd)
+      .query(query);
+
+    const updatedEmployee = await getEmployeeByID(emp.EmployeeID);
+    const updatedEmployeeList = await getEmployees();
+
+    delete updatedEmployee.Pwd;
+    const response = {
+      updatedEmployee: updatedEmployee,
+      updatedEmployeeList: updatedEmployeeList,
+    };
+    return response;
   } catch (error) {
     console.log(error);
     return false;
@@ -244,7 +308,7 @@ const incrementProjectCount = async (projectDetails) => {
 const getListedProject = async () => {
   try {
     let pool = await sql.connect(config);
-    let employees = await pool.request().query(`
+    let listedProjects = await pool.request().query(`
       SELECT
         PL.ProjectID,
         PL.DisplayName,
@@ -263,7 +327,9 @@ const getListedProject = async () => {
         SL.Skill as MandatorySkill,
         PL.AdditionalSkills,
         PL.ShortRoleDescription,
-        PL.DetailedRoleDescription
+        PL.DetailedRoleDescription,
+        PL.EmployeesApplied,
+        PL.AppliedCount
       FROM 
         ProjectList PL
         LEFT JOIN CustomersList CL ON PL.CustomerID = CL.CustomerID
@@ -276,9 +342,147 @@ const getListedProject = async () => {
         LEFT JOIN EmployeeDetails ED3 ON PL.CreatedByID = ED3.EmployeeID
         LEFT JOIN SkillList SL ON PL.MandatorySkillID = SL.SkillID
         `);
-    return employees.recordset;
+
+    listedProjects = listedProjects.recordset;
+    for (let i in listedProjects) {
+      listedProjects[i].AdditionalSkills = listedProjects[
+        i
+      ].AdditionalSkills.replace(/'/g, '"');
+    }
+    return listedProjects;
   } catch (error) {
     console.log(error);
+  }
+};
+
+const getProjectByID = async (ProjectID) => {
+  try {
+    let pool = await sql.connect(config);
+    let listedProject = await pool.request().query(`
+      SELECT
+        PL.ProjectID,
+        PL.DisplayName,
+        CL.Customer as Customer,
+        AL.Account as Account,
+        PCL.Practice as Practice,
+        PL.Area,
+        COL.Country as Country,
+        STL.StateName as State,
+        PL.ProjectManagerID,
+        ED1.Username as ProjectMangerName,
+        PL.DeliveryManagerID,
+        ED2.Username as DeliveryManagerName,
+        PL.CreatedByID,
+        ED3.Username as CreatedByName,
+        SL.Skill as MandatorySkill,
+        PL.AdditionalSkills,
+        PL.ShortRoleDescription,
+        PL.DetailedRoleDescription,
+        PL.EmployeesApplied,
+        PL.AppliedCount
+      FROM 
+        ProjectList PL
+        LEFT JOIN CustomersList CL ON PL.CustomerID = CL.CustomerID
+        LEFT JOIN AccountList AL ON PL.AccountID = AL.AccountID
+        LEFT JOIN PracticeList PCL ON PL.PracticeID = PCL.PracticeID
+        LEFT JOIN CountryList COL ON PL.CountryID = COL.CountryID
+        LEFT JOIN StateList STL ON PL.StateID = STL.StateID
+        LEFT JOIN EmployeeDetails ED1 ON PL.ProjectManagerID = ED1.EmployeeID
+        LEFT JOIN EmployeeDetails ED2 ON PL.DeliveryManagerID = ED2.EmployeeID
+        LEFT JOIN EmployeeDetails ED3 ON PL.CreatedByID = ED3.EmployeeID
+        LEFT JOIN SkillList SL ON PL.MandatorySkillID = SL.SkillID
+      WHERE 
+        PL.ProjectID = ${ProjectID}
+        `);
+    listedProject = listedProject.recordset[0];
+    listedProject.AdditionalSkills = listedProject.AdditionalSkills.replace(
+      /'/g,
+      '"'
+    );
+    return listedProject;
+  } catch (error) {
+    console.log(error);
+  }
+};
+
+const applyToProject = async (EmployeeID, ProjectID) => {
+  try {
+    let pool = await sql.connect(config);
+
+    // get the array from projectsApplied column to add one more project to it
+    let projectsApplied = await pool
+      .request()
+      .query(
+        `SELECT ProjectsApplied FROM EmployeeDetails WHERE EmployeeID = ${EmployeeID}`
+      );
+
+    // get the array from EmployeesApplied column to add one more employee to it
+    let employeesApplied = await pool
+      .request()
+      .query(
+        `SELECT EmployeesApplied FROM ProjectList WHERE ProjectID = ${ProjectID}`
+      );
+    projectsApplied = JSON.parse(
+      projectsApplied.recordsets[0][0].ProjectsApplied
+    );
+    employeesApplied = JSON.parse(
+      employeesApplied.recordsets[0][0].EmployeesApplied
+    );
+
+    // updating the ProjectsApplied in EmployeeDetails with new projectID
+    if (projectsApplied === null) {
+      projectsApplied = [ProjectID];
+    } else if (!projectsApplied.includes(ProjectID)) {
+      projectsApplied.push(ProjectID);
+    } else {
+      return { msg: 'Project already applied' };
+    }
+    projectsApplied = JSON.stringify(projectsApplied);
+
+    // updating the EmplpoyeesApplied in ProjectList with new EmployeeID
+    if (employeesApplied === null) {
+      employeesApplied = [EmployeeID];
+    } else if (!employeesApplied.includes(EmployeeID)) {
+      employeesApplied.push(EmployeeID);
+    } else {
+      return { msg: 'Project already applied' };
+    }
+    employeesApplied = JSON.stringify(employeesApplied);
+
+    // updating EmployeeDetails and ProejctList with new array
+    let updateEmployeeDetails = await pool
+      .request()
+      .query(
+        `UPDATE EmployeeDetails SET ProjectsApplied = '${projectsApplied}' WHERE EmployeeID = ${EmployeeID}`
+      );
+    let updateProjectList = await pool
+      .request()
+      .query(
+        `UPDATE ProjectList SET EmployeesApplied = '${employeesApplied}', AppliedCount = AppliedCount + 1 WHERE ProjectID = ${ProjectID}`
+      );
+
+    if (
+      updateEmployeeDetails.rowsAffected[0] === 1 &&
+      updateProjectList.rowsAffected[0] === 1
+    ) {
+      // getting the updated table now
+      const updatedEmployeeDetails = await getEmployees();
+      const updatedCurrentEmployee = await getEmployeeByID(EmployeeID);
+      const updatedProjectList = await getListedProject();
+      const updatedCurrentProject = await getProjectByID(ProjectID);
+      return {
+        msg: 'Employee sucessfully applied to the project',
+        updatedEmployeeDetails: updatedEmployeeDetails,
+        updatedCurrentEmployee: updatedCurrentEmployee,
+        updatedProjectList: updatedProjectList,
+        updatedCurrentProject: updatedCurrentProject,
+      };
+    } else {
+      return { msg: 'Error in applying to the project' };
+    }
+  } catch (error) {
+    console.log(error);
+    return { msg: 'Error in applying to the project' };
   }
 };
 
@@ -287,8 +491,11 @@ module.exports = {
   getAllListData,
   getEmployeeByID,
   registerEmployee,
+  updateEmployeeDetails,
   listProject,
   getListedProject,
+  getProjectByID,
   incrementProjectCount,
   sortHelperDB,
+  applyToProject,
 };
