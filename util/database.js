@@ -236,12 +236,14 @@ const listProject = async (projectDetails) => {
       AdditionalSkills,
       ShortRoleDescription,
       DetailedRoleDescription,
+      OpenPositions,
     } = projectDetails;
 
     let pool = await sql.connect(config);
     const query = `
       INSERT INTO ProjectList (DisplayName, CustomerID, AccountID, PracticeID, Area, CountryID, StateID, ProjectManagerID, 
-        DeliveryManagerID, CreatedByID, MandatorySkillID, AdditionalSkills, ShortRoleDescription, DetailedRoleDescription)
+        DeliveryManagerID, CreatedByID, MandatorySkillID, AdditionalSkills, 
+        ShortRoleDescription, DetailedRoleDescription, OpenPositions)
       SELECT
         @DisplayName,
         (SELECT CustomerID FROM CustomersList WHERE Customer = @Customer) AS CustomerID,
@@ -256,7 +258,8 @@ const listProject = async (projectDetails) => {
         (SELECT SkillID FROM SkillList WHERE Skill = @MandatorySkill) AS MandatorySkillID,
         @AdditionalSkills,
         @ShortRoleDescription,
-        @DetailedRoleDescription
+        @DetailedRoleDescription,
+        @OpenPositions
     `;
 
     const result = await pool
@@ -279,6 +282,7 @@ const listProject = async (projectDetails) => {
         sql.VarChar(sql.MAX),
         DetailedRoleDescription
       )
+      .input('OpenPositions', sql.Int, OpenPositions)
       .query(query);
 
     return result.rowsAffected[0] > 0 ? projectDetails : false;
@@ -329,7 +333,8 @@ const getListedProject = async () => {
         PL.ShortRoleDescription,
         PL.DetailedRoleDescription,
         PL.EmployeesApplied,
-        PL.AppliedCount
+        PL.AppliedCount,
+        PL.OpenPositions
       FROM 
         ProjectList PL
         LEFT JOIN CustomersList CL ON PL.CustomerID = CL.CustomerID

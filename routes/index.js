@@ -77,9 +77,25 @@ router.post('/list-project', async function (req, res, next) {
 
   let response = await db.listProject(projectDetails);
   await db.incrementProjectCount(projectDetails);
-  response
-    ? res.status(200).send('Project Listed')
-    : res.status(400).send('Project Not Listed! Try again');
+
+  if (response) {
+    let updatedListedProjects = await db.getListedProject();
+    let updatedSorterHelper = await db.sortHelperDB();
+    for (let i in updatedListedProjects) {
+      updatedListedProjects[i].AdditionalSkills = updatedListedProjects[
+        i
+      ].AdditionalSkills.replace(/'/g, '"');
+    }
+    const updatedData = {
+      updatedListedProjects: updatedListedProjects,
+      updatedSorterHelper: updatedSorterHelper,
+      msg: 'Project Listed',
+    };
+
+    res.status(200).send(updatedData);
+  } else {
+    res.status(400).send('Project Not Listed! Try again');
+  }
 });
 
 router.get('/get-listed-projects', async function (req, res, next) {
