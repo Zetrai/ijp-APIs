@@ -12,7 +12,7 @@ router.get('/', function (req, res, next) {
 router.get('/get-all-employees', async function (req, res, next) {
   let employees = await db.getEmployees();
   employees = employees;
-  console.log('All Employees: ', employees);
+  // console.log('All Employees: ', employees);
   res.status(200).send(employees);
 });
 
@@ -20,8 +20,16 @@ router.get('/get-employee-by-id', async function (req, res, next) {
   const EmployeeID = req.query.EmployeeID;
   let employee = await db.getEmployeeByID(EmployeeID);
   delete employee?.Pwd;
-  console.log('Employee: ', employee);
+  // console.log('Employee: ', employee);
   res.status(200).send(employee);
+});
+
+router.get('/get-employees-by-ids', async function (req, res, next) {
+  let ids = req.query.ids;
+  ids = JSON.parse(ids);
+  let employeesData = await db.getEmployeeByIDs(ids);
+  // console.log('Employees: ', employeesData);
+  res.status(200).send(employeesData);
 });
 
 router.get('/get-list-data', async function (req, res, next) {
@@ -50,7 +58,7 @@ router.post('/register-employee', async function (req, res, next) {
 router.post('/login-check', async function (req, res, next) {
   const { EmployeeID, Pwd } = req.body;
   let employee = await db.getEmployeeByID(EmployeeID);
-  console.log('Employee: ', employee);
+  // console.log('Employee: ', employee);
   if (employee !== undefined) {
     const verifyEmp = await helpers.verifyPassword(Pwd, employee.Pwd);
     delete employee.Pwd;
@@ -68,7 +76,7 @@ router.post('/update-employee-profile', async function (req, res, next) {
     employeeDetails.Pwd = await helpers.hashPassword(employeeDetails.Pwd);
   }
   let employee = await db.updateEmployeeDetails(employeeDetails);
-  console.log('final', employee);
+  // console.log('final', employee);
   res.status(200).send(employee);
 });
 
@@ -81,11 +89,6 @@ router.post('/list-project', async function (req, res, next) {
   if (response) {
     let updatedListedProjects = await db.getListedProject();
     let updatedSorterHelper = await db.sortHelperDB();
-    for (let i in updatedListedProjects) {
-      updatedListedProjects[i].AdditionalSkills = updatedListedProjects[
-        i
-      ].AdditionalSkills.replace(/'/g, '"');
-    }
     const updatedData = {
       updatedListedProjects: updatedListedProjects,
       updatedSorterHelper: updatedSorterHelper,
@@ -102,11 +105,6 @@ router.get('/get-listed-projects', async function (req, res, next) {
   const listedProjects = await db.getListedProject();
 
   if (listedProjects) {
-    for (let i in listedProjects) {
-      listedProjects[i].AdditionalSkills = listedProjects[
-        i
-      ].AdditionalSkills.replace(/'/g, '"');
-    }
     res.status(200).send(listedProjects);
   } else {
     res.status(400).send('Error');
@@ -118,6 +116,32 @@ router.get('/apply-to-project', async function (req, res, next) {
   const projectID = req.query.projectID;
   const response = await db.applyToProject(employeeID, projectID);
   res.status(200).send(response);
+});
+
+router.post('/applicants-update', async function (req, res, next) {
+  const body = req.body;
+  const projectInfo = body.projectInfo;
+  const employeeInfo = body.employeeInfo;
+  const type = body.type;
+  const updatedDB = await db.updateApplicants(type, projectInfo, employeeInfo);
+  if (updatedDB) {
+    const updatedSorterHelper = await db.sortHelperDB();
+    const updatedProjectList = await db.getListedProject();
+    const updatedEmployeesData = await db.getEmployees();
+    const updatedCurrentEmp = await db.getEmployeeByID(employeeInfo.EmployeeID);
+    const updatedProjectInfo = await db.getProjectByID(projectInfo.ProjectID);
+    const updatedData = {
+      updatedSorterHelper: updatedSorterHelper,
+      updatedProjectList: updatedProjectList,
+      updatedProjectInfo: updatedProjectInfo,
+      updatedEmployeesData: updatedEmployeesData,
+      updatedCurrentEmp: updatedCurrentEmp,
+      msg: 'Updated Successfully',
+    };
+    res.status(200).send(updatedData);
+  } else {
+    res.status(400).send({ msg: 'Error in Updating Tables' });
+  }
 });
 
 module.exports = router;

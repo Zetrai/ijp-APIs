@@ -105,6 +105,44 @@ const getEmployeeByID = async (EmployeeID) => {
   }
 };
 
+const getEmployeeByIDs = async (ids) => {
+  let whereClause = '';
+  for (let id of ids) {
+    whereClause += `ED.EmployeeID = '${id}' OR `;
+  }
+  whereClause = whereClause.replace(/ OR\s*$/, '');
+  try {
+    let pool = await sql.connect(config);
+    const query = `
+      SELECT
+          ED.EmployeeID,
+          ED.Username,
+          DL.Designation AS Designation,
+          RL.EmpRole AS EmployeeRole,
+          PL.Practice AS Practice,
+          BL.Band AS Band,
+          CL.Country AS Country,
+          SL.StateName AS State,
+          ED.TotalExperience,
+          ED.ProjectsApplied
+      FROM
+          EmployeeDetails ED
+          LEFT JOIN DesignationList DL ON ED.DesignationID = DL.DesignationID
+          LEFT JOIN RoleList RL ON ED.EmpRoleID = RL.EmpRoleID
+          LEFT JOIN PracticeList PL ON ED.PracticeID = PL.PracticeID
+          LEFT JOIN BandList BL ON ED.BandID = BL.BandID
+          LEFT JOIN CountryList CL ON ED.CountryID = CL.CountryID
+          LEFT JOIN StateList SL ON ED.StateID = SL.StateID
+      WHERE
+          ${whereClause}
+    `;
+    let result = await pool.request().query(query);
+    return result.recordset; // This contains the retrieved data
+  } catch (error) {
+    console.log(error);
+  }
+};
+
 const registerEmployee = async (employeeData) => {
   try {
     const {
@@ -384,7 +422,8 @@ const getProjectByID = async (ProjectID) => {
         PL.ShortRoleDescription,
         PL.DetailedRoleDescription,
         PL.EmployeesApplied,
-        PL.AppliedCount
+        PL.AppliedCount,
+        PL.OpenPositions
       FROM 
         ProjectList PL
         LEFT JOIN CustomersList CL ON PL.CustomerID = CL.CustomerID
@@ -491,10 +530,200 @@ const applyToProject = async (EmployeeID, ProjectID) => {
   }
 };
 
+const removeIDFromEmployeeApplied = async (
+  query,
+  projectInfo,
+  employeeInfo
+) => {
+  try {
+    let pool = await sql.connect(config);
+    let EmployeesApplied = JSON.parse(projectInfo.EmployeesApplied);
+    EmployeesApplied = EmployeesApplied.filter(
+      (item) => item != employeeInfo.EmployeeID
+    );
+    EmployeesApplied =
+      EmployeesApplied.length > 0 ? JSON.stringify(EmployeesApplied) : null;
+    updateProjectList = await pool
+      .request()
+      .input('ProjectID', sql.Int, projectInfo.ProjectID)
+      .input('EmployeesApplied', sql.VarChar(50), EmployeesApplied)
+      .query(query);
+    return updateProjectList.rowsAffected[0] === 1;
+  } catch (error) {
+    console.log(error);
+    return {
+      msg: 'removeIDFromEmployeeApplied: Error in updating in updating Applicants',
+    };
+  }
+};
+
+const removeIDFromAllProjects = async (projectInfo, employeeInfo) => {
+  try {
+    let pool = await sql.connect(config);
+    let projectsAvailable = await getListedProject();
+
+    for (let project of projectsAvailable) {
+      if (project.EmployeesApplied !== null) {
+        const oldValue = project.EmployeesApplied;
+        let EmployeesApplied = JSON.parse(oldValue);
+        EmployeesApplied = EmployeesApplied.filter((id) => {
+          return id != employeeInfo.EmployeeID;
+        });
+        EmployeesApplied =
+          EmployeesApplied.length > 0 ? JSON.stringify(EmployeesApplied) : null;
+        if (oldValue !== EmployeesApplied) {
+          let removeID = await pool
+            .request()
+            .input('ProjectID', sql.Int, project.ProjectID)
+            .input('EmployeesApplied', sql.VarChar(50), EmployeesApplied)
+            .query(
+              `UPDATE ProjectList SET AppliedCount = AppliedCount - 1, EmployeesApplied=@EmployeesApplied WHERE ProjectID=@ProjectID`
+            );
+        }
+      }
+    }
+    return true;
+  } catch (error) {
+    console.log(error);
+    return {
+      msg: 'removeIDFromAllProjects: Error in updating in updating Applicants',
+    };
+  }
+};
+
+const setProjectAppliedToNull = async (projectInfo, employeeInfo) => {
+  try {
+    let pool = await sql.connect(config);
+    let updateEmployeeDetails = await pool
+      .request()
+      .input('EmployeeID', sql.Int, employeeInfo.EmployeeID)
+      .query(
+        `UPDATE EmployeeDetails SET ProjectsApplied=NULL WHERE EmployeeID=@EmployeeID`
+      );
+    return updateEmployeeDetails.rowsAffected[0] === 1;
+  } catch (error) {
+    console.log(error);
+    return {
+      msg: 'setProjectAppliedToNull: Error in updating in updating Applicants',
+    };
+  }
+};
+const removeIDFromProjectsApplied = async (projectInfo, employeeInfo) => {
+  try {
+    let pool = await sql.connect(config);
+    let ProjectsApplied = JSON.parse(employeeInfo.ProjectsApplied);
+    ProjectsApplied = ProjectsApplied.filter(
+      (item) => item != projectInfo.ProjectID
+    );
+
+    ProjectsApplied =
+      ProjectsApplied.length > 0 ? JSON.stringify(ProjectsApplied) : null;
+    let updateEmployeeDetails = await pool
+      .request()
+      .input('EmployeeID', sql.Int, employeeInfo.EmployeeID)
+      .input('ProjectsApplied', sql.VarChar(50), ProjectsApplied)
+      .query(
+        `UPDATE EmployeeDetails SET ProjectsApplied=@ProjectsApplied WHERE EmployeeID=@EmployeeID`
+      );
+    return updateEmployeeDetails.rowsAffected[0] === 1;
+  } catch (error) {
+    console.log(error);
+    return {
+      msg: 'removeIDFromProjectsApplied: Error in updating in updating Applicants',
+    };
+  }
+};
+
+const updateApplicants = async (type, projectInfo, employeeInfo) => {
+  try {
+    let pool = await sql.connect(config);
+    let updateCheck = false;
+    let updateProjectList;
+    let updateSkillList = true;
+    let updateEmployeeDetails;
+    let query;
+
+    switch (type) {
+      case 'Approve':
+        const positions = projectInfo.OpenPositions;
+        if (positions > 1) {
+          // If Positions has more than 1 left
+          query = `UPDATE ProjectList SET OpenPositions = OpenPositions - 1, AppliedCount = AppliedCount - 1, EmployeesApplied= @EmployeesApplied WHERE ProjectID=@ProjectID`;
+          updateProjectList = await removeIDFromEmployeeApplied(
+            query,
+            projectInfo,
+            employeeInfo
+          );
+          updateProjectList = await removeIDFromAllProjects(
+            projectInfo,
+            employeeInfo
+          );
+        } else if (positions === 1) {
+          // Removing project from ProjectList
+          updateProjectList = await pool
+            .request()
+            .input('ProjectID', sql.Int, projectInfo.ProjectID)
+            .query(`DELETE FROM ProjectList WHERE ProjectID=@ProjectID`);
+
+          updateProjectList = updateProjectList.rowsAffected[0] === 1;
+          // Updating SkillList with new ProjectCount
+          updateSkillList = await pool
+            .request()
+            .input('Skill', sql.VarChar(50), projectInfo.MandatorySkill)
+            .query(
+              `UPDATE SkillList SET ProjectCount = ProjectCount - 1 WHERE Skill=@Skill`
+            );
+
+          updateSkillList = updateSkillList.rowsAffected[0] === 1;
+        }
+
+        // Updating ProjectsApplied in EmployeeDetails for the employee who got approved
+        updateEmployeeDetails = await setProjectAppliedToNull(
+          projectInfo,
+          employeeInfo
+        );
+
+        if (updateProjectList && updateSkillList && updateEmployeeDetails) {
+          updateCheck = true;
+        }
+        break;
+      case 'Decline':
+        //  Removing the EmployeeID from EmployeeApplied in ProjectList
+        query = `UPDATE ProjectList SET AppliedCount = AppliedCount - 1, EmployeesApplied= @EmployeesApplied WHERE ProjectID=@ProjectID`;
+        updateProjectList = await removeIDFromEmployeeApplied(
+          query,
+          projectInfo,
+          employeeInfo
+        );
+        // Updating ProjectsApplied in EmployeeDetails for the employee who got approved
+        updateEmployeeDetails = await removeIDFromProjectsApplied(
+          projectInfo,
+          employeeInfo
+        );
+        if (updateProjectList && updateEmployeeDetails) {
+          updateCheck = true;
+        }
+        break;
+      default:
+        break;
+    }
+    if (updateCheck) {
+      return true;
+    }
+    return false;
+  } catch (error) {
+    console.log(error);
+    return {
+      msg: 'updateApplicants: Error in updating in updating Applicants',
+    };
+  }
+};
+
 module.exports = {
   getEmployees,
   getAllListData,
   getEmployeeByID,
+  getEmployeeByIDs,
   registerEmployee,
   updateEmployeeDetails,
   listProject,
@@ -503,4 +732,5 @@ module.exports = {
   incrementProjectCount,
   sortHelperDB,
   applyToProject,
+  updateApplicants,
 };
